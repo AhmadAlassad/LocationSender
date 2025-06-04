@@ -1,4 +1,4 @@
-# important note
+# Important note
 The whole app is AI generated with GPT-4.1 model.
 
 # Location Sender
