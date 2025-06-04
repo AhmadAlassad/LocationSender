@@ -8,6 +8,12 @@ import java.io.IOException;
 
 public class ErrorLogger {
     private static final String TAG = "ErrorLogger";
+
+    /**
+     * Logs an error to a file and prints to Logcat. Used for centralized error handling.
+     * @param context Context for file operations
+     * @param e Exception to log
+     */
     public static void logErrorToFile(Context context, Exception e) {
         File logFile = new File(context.getFilesDir(), "ERRORS");
         try (FileWriter writer = new FileWriter(logFile, true)) {

@@ -66,6 +66,10 @@ import java.util.Locale;
 
 import alassad.locationsender.databinding.ActivityMainBinding;
 
+/**
+ * MainActivity is the entry point for the Location Sender app.
+ * It handles UI interactions and delegates business logic to manager classes.
+ */
 public class MainActivity extends AppCompatActivity {
     private static final String PREFS_NAME = "LocationSenderPrefs";
     private static final String PREF_COUNTRY_CODE = "country_code";
@@ -147,6 +151,9 @@ public class MainActivity extends AppCompatActivity {
         binding.textViewTimestamp.setText(getString(R.string.timestamp_placeholder));
     }
 
+    /**
+     * Handles the logic for sending the location via WhatsApp.
+     */
     private void handleSendLocation() {
         String phoneNumber = binding.editTextText.getText().toString();
         if (selectedCountryCode == null) {
@@ -247,6 +254,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Updates the location preview UI by requesting the current location and fetching address/map preview.
+     * Handles permission and location service checks.
+     */
     private void updateLocationPreview() {
         if (!locationManagerWrapper.hasLocationPermission()) {
             binding.textViewStatus.setText(getString(R.string.status_no_permission));
@@ -389,6 +400,8 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
+    // TODO: Move all hardcoded strings in activity_main.xml to strings.xml if any remain.
+    // TODO: Add Javadoc comments to all public classes and methods for documentation.
     // ... (ErrorLogger class can remain as is or be moved to its own file) ...
     // Make sure ErrorLogger.logErrorToFile is static or you have an instance of it.
     public static class ErrorLogger {
