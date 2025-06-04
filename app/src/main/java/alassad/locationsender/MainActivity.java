@@ -64,7 +64,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-import alassad.locationsender.BuildConfig;
 import alassad.locationsender.databinding.ActivityMainBinding;
 
 public class MainActivity extends AppCompatActivity {
@@ -80,6 +79,7 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar progressBarMap;
     private Location lastKnownLocation;
     private Geocoder geocoder;
+    private ILocationPreviewManager locationPreviewManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -93,6 +93,7 @@ public class MainActivity extends AppCompatActivity {
         whatsAppSender = new WhatsAppSender();
         locationProviderClient = LocationServices.getFusedLocationProviderClient(this);
         geocoder = new Geocoder(this, Locale.getDefault());
+        locationPreviewManager = new LocationPreviewManager(this, BuildConfig.GEOAPIFY_API_KEY);
 
         binding.buttonCountryCode.setEnabled(!countryCodeManager.getCountryItems().isEmpty());
 
@@ -172,7 +173,7 @@ public class MainActivity extends AppCompatActivity {
 
         binding.button.setEnabled(false);
         closeKeyboard();
-        
+
         whatsAppSender.sendLocation(this, selectedCountryCode, phoneNumber, lastKnownLocation.getLatitude(), lastKnownLocation.getLongitude());
         // Re-enable button after a short delay or based on WhatsApp callback if possible
         new Handler(Looper.getMainLooper()).postDelayed(() -> binding.button.setEnabled(true), 2000);
@@ -209,7 +210,7 @@ public class MainActivity extends AppCompatActivity {
             }
         } else {
             // Permission already granted
-            updateLocationPreview(); 
+            updateLocationPreview();
         }
     }
 
@@ -255,7 +256,6 @@ public class MainActivity extends AppCompatActivity {
         if (!locationManagerWrapper.isLocationEnabled()) {
             binding.textViewStatus.setText(getString(R.string.status_location_disabled));
             binding.button.setEnabled(false);
-            // Show settings dialog to enable location
             new AlertDialog.Builder(this)
                     .setMessage(getString(R.string.please_enable_location))
                     .setPositiveButton(getString(R.string.dialog_ok_button), (dialogInterface, i) -> startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
@@ -263,23 +263,56 @@ public class MainActivity extends AppCompatActivity {
                     .show();
             return;
         }
-
         binding.textViewStatus.setText(getString(R.string.status_fetching_location));
-        binding.button.setEnabled(false); // Disable button while fetching
+        binding.button.setEnabled(false);
         binding.progressBarMap.setVisibility(View.VISIBLE);
         binding.imageViewPinOverlay.setVisibility(View.VISIBLE);
-
         CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-
         locationProviderClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
                 .addOnSuccessListener(this, location -> {
                     if (location != null) {
                         lastKnownLocation = location;
-                        binding.textViewStatus.setText(getString(R.string.status_location_updated, "")); // Address will be filled by fetchAddress
                         binding.textViewLocationPreview.setText(String.format(Locale.getDefault(), getString(R.string.location_coordinates_format), location.getLatitude(), location.getLongitude()));
                         binding.textViewTimestamp.setText(String.format(Locale.getDefault(), getString(R.string.location_timestamp_format), new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date(location.getTime()))));
-                        fetchAddress(location.getLatitude(), location.getLongitude());
-                        loadMapPreview(location.getLatitude(), location.getLongitude());
+                        locationPreviewManager.fetchAddress(location.getLatitude(), location.getLongitude(), new LocationPreviewManager.Callback() {
+                            @Override
+                            public void onAddressFetched(String address, String statusText) {
+                                binding.textViewAddress.setText(address);
+                                binding.textViewStatus.setText(statusText);
+                            }
+                            @Override
+                            public void onAddressError(String errorMsg) {
+                                binding.textViewAddress.setText(errorMsg);
+                            }
+                            @Override
+                            public void onMapLoaded(Bitmap bitmap) {
+                                binding.imageViewMapPreview.setImageBitmap(bitmap);
+                                binding.progressBarMap.setVisibility(View.GONE);
+                                binding.imageViewPinOverlay.setVisibility(View.GONE);
+                            }
+                            @Override
+                            public void onMapError(String errorMsg) {
+                                Toast.makeText(MainActivity.this, errorMsg, Toast.LENGTH_LONG).show();
+                                handleLocationError(errorMsg);
+                            }
+                        });
+                        locationPreviewManager.loadMapPreview(location.getLatitude(), location.getLongitude(), new LocationPreviewManager.Callback() {
+                            @Override
+                            public void onAddressFetched(String address, String statusText) {}
+                            @Override
+                            public void onAddressError(String errorMsg) {}
+                            @Override
+                            public void onMapLoaded(Bitmap bitmap) {
+                                binding.imageViewMapPreview.setImageBitmap(bitmap);
+                                binding.progressBarMap.setVisibility(View.GONE);
+                                binding.imageViewPinOverlay.setVisibility(View.GONE);
+                            }
+                            @Override
+                            public void onMapError(String errorMsg) {
+                                Toast.makeText(MainActivity.this, errorMsg, Toast.LENGTH_LONG).show();
+                                handleLocationError(errorMsg);
+                            }
+                        });
                         binding.button.setEnabled(true);
                     } else {
                         binding.textViewStatus.setText(getString(R.string.status_failed_location_null));
@@ -296,100 +329,11 @@ public class MainActivity extends AppCompatActivity {
                     binding.imageViewPinOverlay.setVisibility(View.GONE);
                 })
                 .addOnCanceledListener(() -> {
-                    // Handle cancellation if needed
                     Log.d(TAG, "Location request canceled.");
                     binding.progressBarMap.setVisibility(View.GONE);
                     binding.imageViewPinOverlay.setVisibility(View.GONE);
                 });
-
-        // Optional: Set a timeout for the location request
-        new Handler(Looper.getMainLooper()).postDelayed(cancellationTokenSource::cancel, 10000); // 10 seconds timeout
-    }
-
-    private void fetchAddress(double latitude, double longitude) {
-        if (!Geocoder.isPresent()) {
-            binding.textViewAddress.setText(getString(R.string.geocoder_not_available));
-            return;
-        }
-        // Validate coordinates (basic check)
-        if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-            binding.textViewAddress.setText(getString(R.string.error_prefix) + getString(R.string.invalid_coordinates_message));
-            return;
-        }
-
-        new Thread(() -> {
-            try {
-                List<Address> addresses = geocoder.getFromLocation(latitude, longitude, 1);
-                if (addresses != null && !addresses.isEmpty()) {
-                    Address address = addresses.get(0);
-                    StringBuilder addressText = new StringBuilder();
-                    for (int i = 0; i <= address.getMaxAddressLineIndex(); i++) {
-                        addressText.append(address.getAddressLine(i));
-                        if (i < address.getMaxAddressLineIndex()) {
-                            addressText.append(", ");
-                        }
-                    }
-                    runOnUiThread(() -> {
-                        binding.textViewAddress.setText(addressText.toString());
-                        binding.textViewStatus.setText(getString(R.string.status_location_updated, addressText.toString()));
-                    });
-                } else {
-                    runOnUiThread(() -> binding.textViewAddress.setText(getString(R.string.address_not_found)));
-                }
-            } catch (IOException e) {
-                runOnUiThread(() -> binding.textViewAddress.setText(getString(R.string.error_prefix) + e.getMessage()));
-                Log.e(TAG, "Geocoder IOException", e);
-                ErrorLogger.logErrorToFile(this, e);
-            } catch (IllegalArgumentException e) {
-                runOnUiThread(() -> binding.textViewAddress.setText(getString(R.string.error_prefix) + getString(R.string.invalid_coordinates_message)));
-                Log.e(TAG, "Geocoder IllegalArgumentException", e);
-                ErrorLogger.logErrorToFile(this, e);
-            }
-        }).start();
-    }
-
-    private void loadMapPreview(double latitude, double longitude) {
-        binding.progressBarMap.setVisibility(View.VISIBLE);
-        binding.imageViewPinOverlay.setVisibility(View.VISIBLE);
-        // Validate coordinates (basic check)
-        if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-            handleLocationError(getString(R.string.error_prefix) + getString(R.string.invalid_coordinates_message));
-            return;
-        }
-
-        String apiKey = BuildConfig.GEOAPIFY_API_KEY; // API key from local.properties
-        String mapUrl = "https://maps.geoapify.com/v1/staticmap?style=osm-carto&width=600&height=300&center=lonlat:"
-                + longitude + "," + latitude + "&zoom=16&marker=lonlat:" + longitude + "," + latitude + ";type:awesome;color:red;size:medium&apiKey=" + apiKey;
-
-        new Thread(() -> {
-            try {
-                URL url = new URL(mapUrl);
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setDoInput(true);
-                connection.connect();
-                InputStream input = connection.getInputStream();
-                Bitmap bitmap = BitmapFactory.decodeStream(input);
-                input.close();
-                connection.disconnect();
-
-                if (bitmap != null) {
-                    runOnUiThread(() -> {
-                        binding.imageViewMapPreview.setImageBitmap(bitmap);
-                        binding.progressBarMap.setVisibility(View.GONE);
-                        binding.imageViewPinOverlay.setVisibility(View.GONE);
-                    });
-                } else {
-                    throw new IOException("Bitmap is null after decoding stream.");
-                }
-            } catch (IOException e) {
-                Log.e(TAG, "Error loading map image from URL: " + mapUrl, e);
-                ErrorLogger.logErrorToFile(this, e);
-                runOnUiThread(() -> {
-                    Toast.makeText(MainActivity.this, getString(R.string.map_preview_load_failed), Toast.LENGTH_LONG).show();
-                    handleLocationError(getString(R.string.map_preview_load_failed)); // Update status text view
-                });
-            }
-        }).start();
+        new Handler(Looper.getMainLooper()).postDelayed(cancellationTokenSource::cancel, 10000);
     }
 
     private void showCountryCodePicker() {
