@@ -45,4 +45,5 @@
     <string name="action_settings">Settings</string>
     <string name="refreshing_location">Refreshing location...</string>
     <string name="location_not_available_yet">Location not available yet</string>
+    <string name="send_location_title">Send Your Location via WhatsApp</string>
 </resources>

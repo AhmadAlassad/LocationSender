@@ -152,6 +152,99 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
+     * Updates the location preview UI by requesting the current location and fetching address/map preview.
+     * Handles permission and location service checks.
+     */
+    private void updateLocationPreview() {
+        if (!locationManagerWrapper.hasLocationPermission()) {
+            binding.textViewStatus.setText(getString(R.string.status_no_permission));
+            binding.button.setEnabled(false);
+            return;
+        }
+        if (!locationManagerWrapper.isLocationEnabled()) {
+            binding.textViewStatus.setText(getString(R.string.status_location_disabled));
+            binding.button.setEnabled(false);
+            new AlertDialog.Builder(this)
+                    .setMessage(getString(R.string.please_enable_location))
+                    .setPositiveButton(getString(R.string.dialog_ok_button), (dialogInterface, i) -> startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
+                    .setNegativeButton(getString(R.string.dialog_cancel_button), null)
+                    .show();
+            return;
+        }
+        binding.textViewStatus.setText(getString(R.string.status_fetching_location));
+        binding.button.setEnabled(false);
+        binding.progressBarMap.setVisibility(View.VISIBLE);
+        binding.imageViewPinOverlay.setVisibility(View.VISIBLE);
+        CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+        locationProviderClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
+                .addOnSuccessListener(this, location -> {
+                    if (location != null) {
+                        lastKnownLocation = location;
+                        binding.textViewLocationPreview.setText(String.format(Locale.getDefault(), getString(R.string.location_coordinates_format), location.getLatitude(), location.getLongitude()));
+                        binding.textViewTimestamp.setText(String.format(Locale.getDefault(), getString(R.string.location_timestamp_format), new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date(location.getTime()))));
+                        locationPreviewManager.fetchAddress(location.getLatitude(), location.getLongitude(), new LocationPreviewManager.Callback() {
+                            @Override
+                            public void onAddressFetched(String address, String statusText) {
+                                binding.textViewAddress.setText(address);
+                                binding.textViewStatus.setText(statusText);
+                            }
+                            @Override
+                            public void onAddressError(String errorMsg) {
+                                binding.textViewAddress.setText(errorMsg);
+                            }
+                            @Override
+                            public void onMapLoaded(Bitmap bitmap) {
+                                binding.imageViewMapPreview.setImageBitmap(bitmap);
+                                binding.progressBarMap.setVisibility(View.GONE);
+                                binding.imageViewPinOverlay.setVisibility(View.GONE);
+                            }
+                            @Override
+                            public void onMapError(String errorMsg) {
+                                Toast.makeText(MainActivity.this, errorMsg, Toast.LENGTH_LONG).show();
+                                handleLocationError(errorMsg);
+                            }
+                        });
+                        locationPreviewManager.loadMapPreview(location.getLatitude(), location.getLongitude(), new LocationPreviewManager.Callback() {
+                            @Override
+                            public void onAddressFetched(String address, String statusText) {}
+                            @Override
+                            public void onAddressError(String errorMsg) {}
+                            @Override
+                            public void onMapLoaded(Bitmap bitmap) {
+                                binding.imageViewMapPreview.setImageBitmap(bitmap);
+                                binding.progressBarMap.setVisibility(View.GONE);
+                                binding.imageViewPinOverlay.setVisibility(View.GONE);
+                            }
+                            @Override
+                            public void onMapError(String errorMsg) {
+                                Toast.makeText(MainActivity.this, errorMsg, Toast.LENGTH_LONG).show();
+                                handleLocationError(errorMsg);
+                            }
+                        });
+                        binding.button.setEnabled(true);
+                    } else {
+                        binding.textViewStatus.setText(getString(R.string.status_failed_location_null));
+                        handleLocationError(getString(R.string.status_failed_location_null));
+                    }
+                    binding.progressBarMap.setVisibility(View.GONE);
+                    binding.imageViewPinOverlay.setVisibility(View.GONE);
+                })
+                .addOnFailureListener(this, e -> {
+                    binding.textViewStatus.setText(getString(R.string.status_failed_location_error, e.getMessage()));
+                    handleLocationError(getString(R.string.status_failed_location_error, e.getMessage()));
+                    ErrorLogger.logErrorToFile(this, e);
+                    binding.progressBarMap.setVisibility(View.GONE);
+                    binding.imageViewPinOverlay.setVisibility(View.GONE);
+                })
+                .addOnCanceledListener(() -> {
+                    Log.d(TAG, "Location request canceled.");
+                    binding.progressBarMap.setVisibility(View.GONE);
+                    binding.imageViewPinOverlay.setVisibility(View.GONE);
+                });
+        new Handler(Looper.getMainLooper()).postDelayed(cancellationTokenSource::cancel, 10000);
+    }
+
+    /**
      * Handles the logic for sending the location via WhatsApp.
      */
     private void handleSendLocation() {
@@ -255,155 +348,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Updates the location preview UI by requesting the current location and fetching address/map preview.
-     * Handles permission and location service checks.
+     * MainActivity is the entry point for the Location Sender app.
+     * Handles UI interactions and delegates business logic to manager classes.
      */
-    private void updateLocationPreview() {
-        if (!locationManagerWrapper.hasLocationPermission()) {
-            binding.textViewStatus.setText(getString(R.string.status_no_permission));
-            binding.button.setEnabled(false);
-            return;
-        }
-        if (!locationManagerWrapper.isLocationEnabled()) {
-            binding.textViewStatus.setText(getString(R.string.status_location_disabled));
-            binding.button.setEnabled(false);
-            new AlertDialog.Builder(this)
-                    .setMessage(getString(R.string.please_enable_location))
-                    .setPositiveButton(getString(R.string.dialog_ok_button), (dialogInterface, i) -> startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
-                    .setNegativeButton(getString(R.string.dialog_cancel_button), null)
-                    .show();
-            return;
-        }
-        binding.textViewStatus.setText(getString(R.string.status_fetching_location));
-        binding.button.setEnabled(false);
-        binding.progressBarMap.setVisibility(View.VISIBLE);
-        binding.imageViewPinOverlay.setVisibility(View.VISIBLE);
-        CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-        locationProviderClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
-                .addOnSuccessListener(this, location -> {
-                    if (location != null) {
-                        lastKnownLocation = location;
-                        binding.textViewLocationPreview.setText(String.format(Locale.getDefault(), getString(R.string.location_coordinates_format), location.getLatitude(), location.getLongitude()));
-                        binding.textViewTimestamp.setText(String.format(Locale.getDefault(), getString(R.string.location_timestamp_format), new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date(location.getTime()))));
-                        locationPreviewManager.fetchAddress(location.getLatitude(), location.getLongitude(), new LocationPreviewManager.Callback() {
-                            @Override
-                            public void onAddressFetched(String address, String statusText) {
-                                binding.textViewAddress.setText(address);
-                                binding.textViewStatus.setText(statusText);
-                            }
-                            @Override
-                            public void onAddressError(String errorMsg) {
-                                binding.textViewAddress.setText(errorMsg);
-                            }
-                            @Override
-                            public void onMapLoaded(Bitmap bitmap) {
-                                binding.imageViewMapPreview.setImageBitmap(bitmap);
-                                binding.progressBarMap.setVisibility(View.GONE);
-                                binding.imageViewPinOverlay.setVisibility(View.GONE);
-                            }
-                            @Override
-                            public void onMapError(String errorMsg) {
-                                Toast.makeText(MainActivity.this, errorMsg, Toast.LENGTH_LONG).show();
-                                handleLocationError(errorMsg);
-                            }
-                        });
-                        locationPreviewManager.loadMapPreview(location.getLatitude(), location.getLongitude(), new LocationPreviewManager.Callback() {
-                            @Override
-                            public void onAddressFetched(String address, String statusText) {}
-                            @Override
-                            public void onAddressError(String errorMsg) {}
-                            @Override
-                            public void onMapLoaded(Bitmap bitmap) {
-                                binding.imageViewMapPreview.setImageBitmap(bitmap);
-                                binding.progressBarMap.setVisibility(View.GONE);
-                                binding.imageViewPinOverlay.setVisibility(View.GONE);
-                            }
-                            @Override
-                            public void onMapError(String errorMsg) {
-                                Toast.makeText(MainActivity.this, errorMsg, Toast.LENGTH_LONG).show();
-                                handleLocationError(errorMsg);
-                            }
-                        });
-                        binding.button.setEnabled(true);
-                    } else {
-                        binding.textViewStatus.setText(getString(R.string.status_failed_location_null));
-                        handleLocationError(getString(R.string.status_failed_location_null));
-                    }
-                    binding.progressBarMap.setVisibility(View.GONE);
-                    binding.imageViewPinOverlay.setVisibility(View.GONE);
-                })
-                .addOnFailureListener(this, e -> {
-                    binding.textViewStatus.setText(getString(R.string.status_failed_location_error, e.getMessage()));
-                    handleLocationError(getString(R.string.status_failed_location_error, e.getMessage()));
-                    ErrorLogger.logErrorToFile(this, e);
-                    binding.progressBarMap.setVisibility(View.GONE);
-                    binding.imageViewPinOverlay.setVisibility(View.GONE);
-                })
-                .addOnCanceledListener(() -> {
-                    Log.d(TAG, "Location request canceled.");
-                    binding.progressBarMap.setVisibility(View.GONE);
-                    binding.imageViewPinOverlay.setVisibility(View.GONE);
-                });
-        new Handler(Looper.getMainLooper()).postDelayed(cancellationTokenSource::cancel, 10000);
-    }
-
-    private void showCountryCodePicker() {
-        List<CountryCodeManager.CountryItem> countryItems = countryCodeManager.getCountryItems();
-        if (countryItems.isEmpty()) {
-            Toast.makeText(this, getString(R.string.country_codes_not_loaded_picker), Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle(getString(R.string.select_country_code_title));
-
-        View viewInflated = LayoutInflater.from(this).inflate(R.layout.dialog_country_code_picker, (ViewGroup) getWindow().getDecorView(), false);
-        final EditText inputSearch = viewInflated.findViewById(R.id.editTextSearchCountry);
-        final ListView listViewCountries = viewInflated.findViewById(R.id.listViewCountries);
-
-        List<String> countryStrings = new ArrayList<>();
-        for (CountryCodeManager.CountryItem item : countryItems) {
-            countryStrings.add(item.toString());
-        }
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, countryStrings);
-        listViewCountries.setAdapter(adapter);
-
-        inputSearch.addTextChangedListener(new android.text.TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                adapter.getFilter().filter(s);
-            }
-            @Override
-            public void afterTextChanged(android.text.Editable s) {}
-        });
-
-        builder.setView(viewInflated);
-
-        final AlertDialog dialog = builder.create();
-        listViewCountries.setOnItemClickListener((parent, view, position, id) -> {
-            String selectedItem = adapter.getItem(position);
-            if (selectedItem != null && selectedItem.contains(" (")) {
-                int start = selectedItem.indexOf("(");
-                int end = selectedItem.indexOf(")", start);
-                if (start != -1 && end != -1) {
-                    selectedCountryCode = selectedItem.substring(start + 1, end);
-                    binding.buttonCountryCode.setText(selectedCountryCode);
-                    // Save selected country code
-                    SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-                    prefs.edit().putString(PREF_COUNTRY_CODE, selectedCountryCode).apply();
-                }
-            }
-            dialog.dismiss();
-        });
-        dialog.show();
-    }
-
-    // TODO: Move all hardcoded strings in activity_main.xml to strings.xml if any remain.
-    // TODO: Add Javadoc comments to all public classes and methods for documentation.
-    // ... (ErrorLogger class can remain as is or be moved to its own file) ...
-    // Make sure ErrorLogger.logErrorToFile is static or you have an instance of it.
     public static class ErrorLogger {
         private static final String ERROR_LOG_FILE = "error_log.txt";
 
@@ -437,5 +384,54 @@ public class MainActivity extends AppCompatActivity {
                 Log.e(TAG, "Failed to write to error log", e);
             }
         }
+    }
+
+    /**
+     * Shows the country code picker dialog for the user to select a country code.
+     */
+    private void showCountryCodePicker() {
+        List<CountryCodeManager.CountryItem> countryItems = countryCodeManager.getCountryItems();
+        if (countryItems.isEmpty()) {
+            Toast.makeText(this, getString(R.string.country_codes_not_loaded_picker), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(getString(R.string.select_country_code_title));
+        View viewInflated = LayoutInflater.from(this).inflate(R.layout.dialog_country_code_picker, (ViewGroup) getWindow().getDecorView(), false);
+        final EditText inputSearch = viewInflated.findViewById(R.id.editTextSearchCountry);
+        final ListView listViewCountries = viewInflated.findViewById(R.id.listViewCountries);
+        List<String> countryStrings = new ArrayList<>();
+        for (CountryCodeManager.CountryItem item : countryItems) {
+            countryStrings.add(item.toString());
+        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, countryStrings);
+        listViewCountries.setAdapter(adapter);
+        inputSearch.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                adapter.getFilter().filter(s);
+            }
+            @Override
+            public void afterTextChanged(android.text.Editable s) {}
+        });
+        builder.setView(viewInflated);
+        final AlertDialog dialog = builder.create();
+        listViewCountries.setOnItemClickListener((parent, view, position, id) -> {
+            String selectedItem = adapter.getItem(position);
+            if (selectedItem != null && selectedItem.contains(" (")) {
+                int start = selectedItem.indexOf("(");
+                int end = selectedItem.indexOf(")", start);
+                if (start != -1 && end != -1) {
+                    selectedCountryCode = selectedItem.substring(start + 1, end);
+                    binding.buttonCountryCode.setText(selectedCountryCode);
+                    SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+                    prefs.edit().putString(PREF_COUNTRY_CODE, selectedCountryCode).apply();
+                }
+            }
+            dialog.dismiss();
+        });
+        dialog.show();
     }
 }
