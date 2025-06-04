@@ -1,3 +1,6 @@
+# important note
+The whole app is AI generated with GPT-4.1 model.
+
 # Location Sender
 
 Location Sender is an Android app that allows users to quickly share their current location via WhatsApp. The app features country code selection, live location preview, and a static map image using Geoapify.
