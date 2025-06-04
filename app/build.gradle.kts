@@ -1,13 +1,29 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
 }
 
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+val geoapifyApiKey = localProperties.getProperty("GEOAPIFY_API_KEY") ?: ""
+
 android {
     namespace = "alassad.locationsender"
     compileSdk = 34
+
+    buildFeatures {
+        buildConfig = true
+    }
+    android.buildFeatures.buildConfig = true
+
     viewBinding {
         enable = true
     }
+
     defaultConfig {
         applicationId = "alassad.locationsender"
         minSdk = 24
@@ -16,6 +32,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "GEOAPIFY_API_KEY", "\"$geoapifyApiKey\"")
     }
 
     buildTypes {
@@ -28,6 +45,7 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
@@ -35,7 +53,6 @@ android {
 }
 
 dependencies {
-
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)

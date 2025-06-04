@@ -1,15 +1,49 @@
+# Android Studio / IntelliJ
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+.idea/
+.gradle/
 local.properties
+
+# Build
+/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Captures
+/captures/
+
+# External Native Build
+.externalNativeBuild/
+.cxx/
+
+# Keystore files (if you were to add them, they should be ignored)
+# *.jks
+# *.keystore
+
+# Log files
+*.log
+
+# Other
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/
+
+# Java/Python bytecode
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# Patch/backup/temp files
+*.orig
+*.rej
+*.swp
+*.swo
+*.tmp
+*.bak
+*.patch

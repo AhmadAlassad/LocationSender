@@ -64,6 +64,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+import alassad.locationsender.BuildConfig;
 import alassad.locationsender.databinding.ActivityMainBinding;
 
 public class MainActivity extends AppCompatActivity {
@@ -356,7 +357,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        String apiKey = "853fb8ac672f4cc2bc4123e68f35be8b"; // Replace with your actual Geoapify API key
+        String apiKey = BuildConfig.GEOAPIFY_API_KEY; // API key from local.properties
         String mapUrl = "https://maps.geoapify.com/v1/staticmap?style=osm-carto&width=600&height=300&center=lonlat:"
                 + longitude + "," + latitude + "&zoom=16&marker=lonlat:" + longitude + "," + latitude + ";type:awesome;color:red;size:medium&apiKey=" + apiKey;
 
