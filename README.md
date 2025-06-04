@@ -19,7 +19,7 @@ Location Sender is an Android app that allows users to quickly share their curre
 - **Dependency Inversion**: UI depends on interfaces, not concrete implementations.
 - **Centralized Error Handling**: All errors are logged via `ErrorLogger`.
 
-## Setup
+## Setup the code
 1. Clone the repository.
 2. Add your Geoapify API key to `local.properties`:
    ```
@@ -27,6 +27,10 @@ Location Sender is an Android app that allows users to quickly share their curre
    ```
 3. Open the project in Android Studio.
 4. Build and run on your device or emulator.
+
+## Setup the apk
+1. Find the apk in the releases section.
+2. Download it and deploy it to your device.
 
 ## Testing
 - Unit tests can be added for manager classes in `app/src/test/java/`.
